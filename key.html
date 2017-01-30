@@ -4,35 +4,61 @@
 <meta charset="UTF-8">
 <title>KeyLang: A Scripting Language in the Key of C</title>
 <style type="text/css">
-code {
-  background: #ddf;
-  border: 1px solid #bbf;
-}
+code { background: #def; font-family: inherit; }
 var { font-style: italic; }
+
+h2 { margin-top: 2em; }
+h3 { margin-top: 1.5em; }
+h3 code { font-family: inherit; }
+
+div.example { margin: 0 2em; }
 pre {
+  margin: .5em 0;
   padding: .2em .5em;
-  background: #cfc;
+  background: #efd;
   border: 1px solid #8f8;
-  margin: 0 5em;
 }
 
-dl { margin: 0 5em; }
+dl { margin: 0 2em; padding: 0; }
 dt {
   margin: 0;
   padding: .2em .5em;
-  background: #ddf;
-  border: 1px solid #bbf;
+  background: #def;
+  border: 1px solid #bdf;
   border-bottom: 0;
 }
+dt code { font-weight: bold; }
 dd {
-  margin: 0 0 .3em 0;
+  margin: 0 0 .5em 0;
   padding: 0 2em;
-  border: 1px solid #bbf;
+  border: 1px solid #bdf;
 }
 
 p { margin: 1em; }
 dl p { margin: 1em 0; }
 li { margin: 1em; }
+
+.enum {
+  border-spacing: 1em 0;
+  margin: 1em;
+}
+.enum th { text-align: left; }
+
+.oper {
+  border-spacing: 0 0;
+  margin: 0 2em;
+  border: 1px solid #bdf;
+}
+.oper th {
+  padding: .2em .5em;
+  text-align: left;
+  background: #def;
+  border-top: 1px solid #bdf;
+}
+.oper td {
+  padding: .2em .5em;
+}
+
 </style>
 </head>
 <body>
@@ -43,8 +69,8 @@ li { margin: 1em; }
 
 <p>KeyLang was designed to be small, simple, and easy to integrate and use. No
 attempts have been made to support any of the latest whiz-bang paradigms or
-theoretical stuff, just the basics of procedural programming. The primary
-design goal was to avoid malloc or GC during script execution.</p>
+theoretical stuff, just the basics. The primary design goal was to avoid malloc
+or GC during script execution.</p>
 
 <p>Key features of KeyLang:</p>
 
@@ -54,18 +80,21 @@ design goal was to avoid malloc or GC during script execution.</p>
 <li>No run-time malloc or GC. The only allocations are during compilation
     or by user-defined functions.</li>
 <li>No objects. No closures. No co-routines. No clever, mathy, or weird
-    stuff. Just good old-fashioned procedural programming.</li>
-<lI>No arrays, hash-maps, collections, lists, or sequences. No file I/O.</li>
+    stuff. Just good old-fashioned programming.</li>
+<li>No arrays, hash-maps, collections, lists, or sequences. No file I/O.
+    You can add your own.</li>
 <li>No threading support, but scripts can be paused and resumed, which is
     close enough.</li>
 <li>Dynamic yet strict typing. Only integers, strings, and undefined are
     built-in.</li>
 <li>Strings are atomic, immutable, interned, and mostly encoding-agnostic.
     (Anything consistent with ASCII, including UTF-8.)</li>
+<li>Anonymous function expressions, but no closures.</li>
 <li>No FFI, but easy-enough integration with native code and data.</li>
-<li>User-defined operators, functions, and types.</li>
-<li>Easy to get up and running; the API isn't full of constructors for
-    stuff that will wind up being the same in every program anyway.</li>
+<li>User-defined functions and types. Syntactic support for accessing members
+    and methods of compound types.</li>
+<li>Easy to get up and running; the API isn't full of constructors and options
+    for stuff that will end up being the same in every program anyway.</li>
 <li>No actual boolean type, but undefined, zero, the empty string
     (<code>""</code>), and <code>NULL</code> custom types are false.</li>
 <li>Great for video games. (Hopefully. I haven't actually used this for
@@ -76,46 +105,127 @@ design goal was to avoid malloc or GC during script execution.</p>
 
 <h3>Tokens</h3>
 
-<p>Comments: Block <code>/*...*/</code> and line <code>//...\n</code>.</p>
+<p><b>Comments:</b> Block <code>/*...*/</code> and line
+<code>//...\n</code>.</p>
 
-<p>Integers: Consistent with <code>strtol</code>: decimal, hexadecimal, and
-octal. Most likely 32-bit signed.</p>
+<p><b>Integers:</b> Consistent with <code>strtol</code>: decimal, hexadecimal,
+and octal. Most likely 32-bit and signed.</p>
 
-<p>Strings: Double-quoted or single-quoted. The only escapes recognized are
-newlines (<code>\r</code>, <code>\n</code>), tab (<code>\t</code>),
+<p><b>Strings:</b> Double-quoted or single-quoted. The only escapes recognized
+are newlines (<code>\r</code>, <code>\n</code>), tab (<code>\t</code>),
 literals (<code>\\</code>), and embedded newlines (<code>\&lt;newline&gt;</code>
 is dropped from the string). No numeric escapes are recognized; are they even
 needed?</p>
 
-<p>Identifiers: Letters, digits, underscore (<code>_</code>), and any
+<p><b>Identifiers:</b> Letters, digits, underscore (<code>_</code>), and any
 extended characters (Unicode or whatever). Identifiers cannot start
 with a digit.</p>
 
-<p>Keywords: <code>break</code>, <code>continue</code>, <code>else</code>,
-<code>fn</code>, <code>gfn</code>, <code>gvar</code>, <code>if</code>,
-<code>return</code>, <code>undef</code>, <code>var</code>, <code>while</code>.</p>
+<p><b>Keywords:</b> <code>break</code>, <code>continue</code>, <code>do</code>,
+<code>else</code>, <code>fn</code>, <code>for</code>, <code>gfn</code>,
+<code>gvar</code>, <code>if</code>, <code>is</code>, <code>isnot</code>,
+<code>return</code>, <code>typeof</code>, <code>undef</code>, <code>var</code>,
+<code>while</code>.</p>
 
-<p>Built-in operators: Comma (<code>,</code>), semi-colon (<code>;</code>),
-parentheses (<code>(</code>, <code>)</code>), and curly braces
-(<code>{</code>, <code>}</code>).</p>
+<p><b>Type names:</b> <code>undef</code>, <code>int</code>,
+<code>string</code>, <code>native</code> (C function),
+<code>function</code> (script function).</p>
 
-<p>Operators: Custom operators may consist of any ASCII punctuation except
-for underscore (<code>_</code>) and the built-in operators. Cutsom operators
-must be separated from each other by whitespace. Several types of operators
-are recognized: infix, prefix, asfix (assignemnt), and shortfix
-(short-circuiting).</p>
+<p><b>Operators:</b> All of them, and then some. Have a precedence table:</p>
+
+<table class="oper">
+<tr><th>Operator</th><th>Associativity</th><th>Description</th><th>Types</th></tr>
+<tr><th colspan="4">Primary</th></tr>
+<tr><td><code>(&nbsp;)</code></td><td>l-to-r</td><td>sub-expression</td><td>any</td></tr>
+<tr><td><code>{&nbsp;}</code></td><td>l-to-r</td><td>object literal</td><td>any</td></tr>
+<tr><td><code>[&nbsp;]</code></td><td>l-to-r</td><td>array literal</td><td>any</td></tr>
+<tr><th colspan="4">Postfix Member</th></tr>
+<tr><td><code>[&nbsp;]</code></td><td>l-to-r</td><td>subscript</td><td>any</td></tr>
+<tr><td><code>.</code></td><td>l-to-r</td><td>member</td><td>any</td></tr>
+<tr><th colspan="4">Postfix</th></tr>
+<tr><td><code>(&nbsp;)</code></td><td>l-to-r</td><td>function call</td><td>native, function</td></tr>
+<tr><td><code>++</code></td><td>l-to-r</td><td>post-increment</td><td>int</td></tr>
+<tr><td><code>--</code></td><td>l-to-r</td><td>post-decrement</td><td>int</td></tr>
+<tr><th colspan="4">Prefix</th></tr>
+<tr><td><code>~</code></td><td>r-to-l</td><td>bitwise not</td><td>int</td></tr>
+<tr><td><code>!</code></td><td>r-to-l</td><td>logical not</td><td>any</td></tr>
+<tr><td><code>+</code></td><td>r-to-l</td><td>no operation</td><td>any</td></tr>
+<tr><td><code>-</code></td><td>r-to-l</td><td>negation</td><td>int</td></tr>
+<tr><td><code>?</code></td><td>r-to-l</td><td>is defined</td><td>any</td></tr>
+<tr><td><code>typeof</code></td><td>r-to-l</td><td>type of value as a string</td><td>any</td></tr>
+<tr><td><code>++</code></td><td>r-to-l</td><td>pre-increment</td><td>int</td></tr>
+<tr><td><code>--</code></td><td>r-to-l</td><td>pre-decrement</td><td>int</td></tr>
+<tr><th colspan="4">Infix Multiplicative</th></tr>
+<tr><td><code>*</code></td><td>l-to-r</td><td>multiplication</td><td>int</td></tr>
+<tr><td><code>/</code></td><td>l-to-r</td><td>division</td><td>int</td></tr>
+<tr><td><code>%</code></td><td>l-to-r</td><td>modulus</td><td>int</td></tr>
+<tr><th colspan="4">Infix Additive</th></tr>
+<tr><td><code>+</code></td><td>l-to-r</td><td>addition</td><td>int</td></tr>
+<tr><td><code>-</code></td><td>l-to-r</td><td>subtraction</td><td>int</td></tr>
+<tr><th colspan="4">Infix Bitwise</th></tr>
+<tr><td><code>^</code></td><td>l-to-r</td><td>bitwise exclusive-or</td><td>int</td></tr>
+<tr><td><code>&amp;</code></td><td>l-to-r</td><td>bitwise and</td><td>int</td></tr>
+<tr><td><code>|</code></td><td>l-to-r</td><td>bitwise inclusive-or</td><td>int</td></tr>
+<tr><td><code>&lt;&lt;</code></td><td>l-to-r</td><td>shift left</td><td>int</td></tr>
+<tr><td><code>&gt;&gt;</code></td><td>l-to-r</td><td>signed shift right</td><td>int</td></tr>
+<tr><td><code>&gt;&gt;&gt;</code></td><td>l-to-r</td><td>unsigned shift right</td><td>int</td></tr>
+<tr><th colspan="4">Infix Comparison</th></tr>
+<tr><td><code>==</code></td><td>l-to-r</td><td>equal</td><td>any</td></tr>
+<tr><td><code>!=</code></td><td>l-to-r</td><td>not equal</td><td>any</td></tr>
+<tr><td><code>&lt;</code></td><td>l-to-r</td><td>less than</td><td>int, string</td></tr>
+<tr><td><code>&lt;=</code></td><td>l-to-r</td><td>less than or equal</td><td>int, string</td></tr>
+<tr><td><code>&gt;</code></td><td>l-to-r</td><td>greater than</td><td>int, string</td></tr>
+<tr><td><code>&gt;=</code></td><td>l-to-r</td><td>greater than or equal</td><td>int, string</td></tr>
+<tr><td><code>is</code></td><td>l-to-r</td><td>is of a type</td><td>any</td></tr>
+<tr><td><code>isnot</code></td><td>l-to-r</td><td>is not of a type</td><td>any</td></tr>
+<tr><th colspan="4">Infix Logical (Short-Circuiting)</th></tr>
+<tr><td><code>&amp;&amp;</code></td><td>l-to-r</td><td>logical and</td><td>any</td></tr>
+<tr><td><code>||</code></td><td>l-to-r</td><td>logical inclusive-or</td><td>any</td></tr>
+<tr><td><code>??</code></td><td>l-to-r</td><td>coalesce (evaluate right-hand side if left is undefined)</td><td>any</td></tr>
+<tr><th colspan="4">Ternary</th></tr>
+<tr><td><code>?&nbsp;:</code></td><td>l-to-r</td><td>conditional</td><td>any</td></tr>
+<tr><th colspan="4">Assignment</th></tr>
+<tr><td><code>=</code></td><td>r-to-l</td><td>assignment</td><td>any</td></tr>
+<tr><td><code>+=</code></td><td>r-to-l</td><td>addition assignment</td><td>int</td></tr>
+<tr><td><code>-=</code></td><td>r-to-l</td><td>subtraction assignment</td><td>int</td></tr>
+<tr><td><code>*=</code></td><td>r-to-l</td><td>multiplication assignment</td><td>int</td></tr>
+<tr><td><code>/=</code></td><td>r-to-l</td><td>division assignment</td><td>int</td></tr>
+<tr><td><code>%=</code></td><td>r-to-l</td><td>modulus assignment</td><td>int</td></tr>
+<tr><td><code>^=</code></td><td>r-to-l</td><td>bitwise exclusive-or assignment</td><td>int</td></tr>
+<tr><td><code>&amp;=</code></td><td>r-to-l</td><td>bitwise and assignment</td><td>int</td></tr>
+<tr><td><code>&amp;&amp;=</code></td><td>r-to-l</td><td>logical and assignment (replace value if current value is truthy)</td><td>any</td></tr>
+<tr><td><code>|=</code></td><td>r-to-l</td><td>bitwise inclusive-or assignment</td><td>int</td></tr>
+<tr><td><code>||=</code></td><td>r-to-l</td><td>logical inclusive-or assignment (replace value if current value is falsey)</td><td>any</td></tr>
+<tr><td><code>&lt;&lt;=</code></td><td>r-to-l</td><td>shift left assignment</td><td>int</td></tr>
+<tr><td><code>&gt;&gt;=</code></td><td>r-to-l</td><td>signed shift right assignment</td><td>int</td></tr>
+<tr><td><code>&gt;&gt;&gt;=</code></td><td>r-to-l</td><td>unsigned shift right assignment</td><td>int</td></tr>
+<tr><td><code>??=</code></td><td>r-to-l</td><td>coalesce assignment (replace value if current value is undefined)</td><td>any</td></tr>
+<tr><th colspan="4">Comma</th></tr>
+<tr><td><code>,</code></td><td>l-to-r</td><td>expression separator</td><td>any</td></tr>
+</table>
+
+<p>There's also the rest-argument operator (<code>...</code>) which doesn't
+have precedence and is only valid following the last identifier in a function
+definition's parameter list.</p>
+
+<p>(Note: You can use <code>?</code> with <code>!</code> for an &ldquo;is
+undefined&rdquo; operator like so: <code>!?<var>expr</var></code>; I call
+this the &ldquo;wtf&rdquo; operator because &ldquo;<em>why the &mdash; is it
+undefined!?&rdquo;)</em></p>
+
+<p><b>Custom operators:</b> Several syntactic constructs are supported via
+special functions, either native or script. These functions are listed in
+their own section.</p>
 
 <h3>Grammar</h3>
 
-<p>At top-level in a file, only variable and function declarations are
-allowed. Variables may be set to constant values, but not "constant
-expressions".</p>
-
 <p>Examples:</p>
 
+<div class="example">
 <pre>
 gvar foo = 5;
 var bar = "happy times!";
+
 fn doTheThing(a,b,c) {
   var d = a + b;
   return c * d;
@@ -123,25 +233,27 @@ fn doTheThing(a,b,c) {
 gfn globalstuff(a) return a + 5;
 var baz = 3 + 5; // error
 </pre>
+</div>
 
 <p><code>gvar</code> and <code>gfn</code> are globally defined variants
-of <code>var</code> and <code>fn</code>, which are file-scoped.</p>
-
-<h4>Statements</h4>
+of file-scoped or locally-scoped <code>var</code> and <code>fn</code>.
+<code>gvar</code> and <code>gfn</code> are allowed only at top-level
+(and not even in the body of a top-level <code>if</code>).</p>
 
 <p>Statement types include:</p>
 
 <dl>
 
-<dt>if (<var>expr</var>) <var>statement</var><br>
-if (<var>expr</var>) <var>statement</var> else <var>statement</var></dt>
+<dt><code>if</code> (<var>expr</var>) <var>statement</var><br>
+<code>if</code> (<var>expr</var>) <var>statement</var> <code>else</code>
+<var>statement</var></dt>
 <dd>
 <p>If the <var>expr</var> is not false, the first <var>statement</var> will
 be evaluated; otherwise, the second <var>statement</var> will be evaluated.</p>
 </dd>
 
-<dt>break;<br>
-continue;</dt>
+<dt><code>break</code>;<br>
+<code>continue</code>;</dt>
 <dd>
 <p>Only allowed inside a <code>while</code> loop. <code>break</code> exits
 the loop; <code>continue</code> jumps back to the top, re-evaluating the
@@ -157,171 +269,174 @@ much required for functions. (Single-statement functions don't need the
 curly braces.)</p>
 </dd>
 
-<dt>return;<br>
-return <var>expr</var>;</dt>
+<dt><code>return</code>;<br>
+<code>return</code> <var>expr</var>;</dt>
 <dd>
 <p>Return a value from a function. The <var>expr</var> is optional; if
 a value is not given, the function returns <code>undef</code>.</p>
 </dd>
 
-<dt>var <var>ident</var>;<br>
-var <var>ident</var> = <var>expr</var>;<br>
-gvar <var>ident</var>, <var>ident</var> = <var>expr</var>;</dt>
+<dt><code>var</code> <var>ident</var>;<br>
+<code>var</code> <var>ident</var> = <var>expr</var>;<br>
+<code>gvar</code> <var>ident</var>, <var>ident</var> = <var>expr</var>;</dt>
 <dd>
 <p>Declare locally-scoped variables inside a function; or, if at top-level,
-file-scoped variables.</p>
+file-scoped variables. The <code>gvar</code> variant declares the
+variable in global scope.</p>
 
 <p>The <code>var</code> statement may contain one or more identifiers,
 with optional values, separated by commas. Variables must be declared
 before use, and cannot be declared multiple times.</p>
 </dd>
 
-<dt>while (<var>expr</var>) <var>statement</var></dt>
+<dt>
+<code>for</code> ( ; ; ) <var>statement</var><br>
+<code>for</code> (<var>expr</var>; <var>expr</var>; <var>expr</var>)
+<var>statement</var><br>
+<code>do</code> <var>statement</var> <code>while</code> (<var>expr</var>);<br>
+<code>while</code> (<var>expr</var>) <var>statement</var></dt>
 <dd>
-<p>As long as <var>expr</var> is true, evaluate <var>statement</var>.</p>
+<p>Loops. As long as the condition is true, evaluate <var>statement</var>.</p>
 </p>
 </dd>
 
 <dt>;<br>
 <var>expr</var>;</dt>
 <dd>
-<p>Evaluate the expression.</p>
+<p>Evaluate the expression, or do nothing.</p>
 </dd>
 
-<dt>fn <var>ident</var>() <var>statement</var><br>
-fn <var>ident</var>(<var>arg1</var>) <var>statement</var><br>
-gfn <var>ident</var>(<var>arg1</var>,<var>arg2</var>) <var>statement</var></dt>
+<dt><code>fn</code> <var>ident</var>() <var>statement</var><br>
+<code>fn</code> <var>ident</var>(<var>arg1</var>...) <var>statement</var><br>
+<code>gfn</code> <var>ident</var>(<var>arg1</var>,<var>arg2</var>)
+<var>statement</var></dt>
 <dd>
 <p>Declare a function with name <var>ident</var>. Functions can have any
-number of arguments. Functions cannot be declared inside of other functions.</p>
+number of parameters. Functions can be declared inside of other functions
+and can also be declared with or without a name inside an expression (similar
+to Javascript) but do not have access to the enclosing lexical scope
+(i.e., no closures).</p>
 
-<p>A function may be called with any number of arguments. Missing
-arguments will be set to <code>undef</code>.</p>
+<p>A function may be called with any number of arguments. Missing parameters
+will be set to <code>undef</code>. If the last parameter is specified as a
+rest-argument (<code>...</code>), its value depends on the return value of
+the special function <code>__array__</code>, which will be called every time
+the function is called, regardless of the number of arguments passed to it.
+An example of rest-arguments:</p>
+
+<div class="example">
+<pre>
+fn one(a...) { return a; }
+fn rest(a,b,c...) { return c; }
+one(); // []
+one(1); // [1]
+one(1,2); // [1,2]
+rest(1,2); // []
+rest(1,2,3); // [3]
+rest(1,2,3,4); // [3,4]
+</pre>
+</div>
+
+<p>If the special function <code>__array__</code> is not defined, then calling
+a function taking rest-arguments will result in a runtime error (specifically,
+an error about <code>__array__</code> being undefined).</p>
 </dd>
 
 </dl>
 
-<h4>Expressions</h4>
+<h3>Variable Scope</h3>
 
-<p>Expressions may contain the following, in order of precedence:</p>
+<p>Values delcared using <code>gfn</code> or <code>gvar</code> in any file
+are in global scope and will be available to all script environments. Values
+declared at top-level in a file using <code>fn</code> or <code>var</code> are
+file-scoped. Values declared inside a function are locally-scoped to that
+function. There is no block scope.</p>
 
-<dl>
-<dt>Primary Expression</dt>
-<dd>
-<p>Integer constants, string literals, or the keyword <code>undef</code>.
-Identifiers and any expression enclosed within parentheses
-(<code>()</code>).</p>
-</dd>
+<p>A function defined inside another function does not have access to
+variables in the containing function (i.e., no closures).</p>
 
-<dt>Call Expression</dt>
-<dd>
-<p>Function call. An identifier followed by an argument list enclosed
-in parentheses (<code>()</code>). The argument list is a comma-separated
-list of Assignment Expressions. Example:</p>
-
-<pre>foo(a = 7, 2 + 3, "more");</pre>
-
-<p>The function <code>foo</code> is called with three arguments:
-<code>7</code>, <code>5</code>, and <code>"more"</code>.</p>
-</dd>
-
-<dt>Prefix Expression</dt>
-<dd>
-<p>A Call Expression preceeded by one or more prefix operators. Example:</p>
-
-<pre>result = -foo();</pre>
-
-<p><code>result</code> is assigned the integer-negation of the return value
-of <code>foo</code>.</p>
-
-<p>Default prefix operators: logical not (<code>!</code>), bit-wise
-not (<code>~</code>), and integer negation (<code>-</code>).</p>
-</dd>
-
-<dt>Infix Expression</dt>
-<dd>
-<p>Two Prefix Expressions with an infix operator in between. Example:</p>
-
-<pre>foo = a + b * c;</pre>
-
-<p>All infix operators share the same precedence and are left-associative.
-The example above is evaluated as:</p>
-
-<pre>foo = (a + b) * c;</pre>
-
-<p>Default infix operators: addition (<code>+</code>),
-subtraction (<code>-</code>), multiplication (<code>*</code>),
-division (<code>/</code>), modulus (<code>%</code>),
-bit-wise and (<code>&amp;</code>), bit-wise or (<code>|</code>),
-bit-wise xor (<code>^</code>), shift-left (<code>&lt;&lt;</code>),
-shift-right (<code>&gt;&gt;</code>), less-than (<code>&lt;</code>),
-greater-than (<code>&gt;</code>), less-or-equal (<code>&lt;=</code>),
-greater-or-equal (<code>&gt;=</code>), equal (<code>==</code>),
-and not-equal (<code>!=</code>).</p>
-</dd>
-
-<dt>Shortfix Expression</dt>
-<dd>
-<p>Two Infix Expressions with a shortfix operator in between. Short-circuit
-operators are similar to infix operators, but they have
-a higher precedence and do not evaluate their right-hand side unless
-the left-hand side requires it. The result of the operation is the
-value of either the left-hand side or the right-hand side. Example:</p>
-
-<pre>var c = a || foo();</pre>
-
-<p>The function <code>foo</code> is only called if <code>a</code> is false.</p>
-
-<p>Default shortfix operators: logical-and (<code>&amp;&amp;</code>),
-logical-or (<code>||</code>), and coalesce (<code>??</code>).
-Logical-and only evaluates the right-hand side if the left is true.
-Logical-or only evaluates the right-hand side if the left is false.
-Coalesce only evaluates the right-hand side if the left is undefined.</p>
-</dd>
-
-<dt>Assignment Expression</dt>
-<dd>
-<p>Assignment operators are the same as infix operators, but also perform
-assignment. Example:</p>
-
-<pre>foo += 7;</pre>
-
-<p>Default assignment operators: normal (<code>=</code>), addition
-(<code>+=</code>), subtraction (<code>-=</code>), multiplication
-(<code>*=</code>), division (<code>/=</code>), modulus (<code>%=</code>),
-bit-wise and (<code>&amp;=</code>), bit-wise or (<code>|=</code>),
-bit-wise xor (<code>^=</code>), shift-left (<code>&lt;&lt;=</code>),
-shift-right (<code>&gt;&gt;=</code>).</p>
-</dd>
-
-<dt>Expression</dt>
-<dd>
-<p>An Expression is a comma-separated list of Assignment Expressions. The
-comma operator (<code>,</code>) evaluates both sides and the result is the
-right-hand side.</p>
-</dd>
-
-</dl>
+<p>Variable names are not allowed to shadow file-scoped or globally-scoped
+names.</p>
 
 <h3>Default Functions</h3>
 
+<p>The default functions are only provided if <code>key_global_defaults</code>
+is called. The supporting native functions are available for defining directly
+under other names.</p>
+
 <dl>
 
-<dt>isdef(...)</dt>
-<dd>
-<p>Returns true if all arguments are defined, false if any of them are
-undefined.</p>
-</dd>
-
-<dt>debug(...)</dt>
-<dd>
-<p>Prints all arguments to <code>stdout</code>, followed by a newline.</p>
-</dd>
-
-<dt>fail(...)</dt>
+<dt>gfn <code>fail</code>(...);</dt>
 <dd>
 <p>Prints all arguments to <code>key_errmsg</code> then stops the script's
 execution, returning the error to the script's caller.</p>
+</dd>
+
+<dt>gfn <code>debug</code>(...);</dt>
+<dd>
+<p>Prints all arguments to <code>stderr</code>, followed by a newline.</p>
+</dd>
+
+<dt>gfn <code>trace</code>();</dt>
+<dd>
+<p>Prints the current stack trace to <code>stderr</code>.</p>
+</dd>
+
+<dt>gfn <code>pause</code>();</dt>
+<dd>
+<p>Suspend execution of the script.</p>
+</dd>
+
+</dl>
+
+<h3>Special Functions</h3>
+
+<p>Special functions provide syntactic support for custom compound types,
+and may be implemented as script functions or as native functions. These
+are not defined by <code>key_global_defaults</code>.</p>
+
+<dl>
+
+<dt>gfn <code>__member__</code>(<var>object</var>, <var>member</var>,
+<var>value</var>);<br>
+keyret <code>__member__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
+int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Retrieve or assign a member value in an object. If the function receives
+three arguments, then the assignment form is being invoked. Either way, the
+value of the member must be returned. This function handles subscript
+(<code>[&nbsp;]</code>, <code>[&nbsp;]&nbsp;=</code>) and member
+(<code>.</code>, <code>.&nbsp;=</code>) operators; there is no way
+to tell the difference between the two syntaxes.</p>
+
+<p>Compund assignments (<code>+=</code>, etc.) and the increment operators
+are handled by the scripting language, with the final simple assignment
+performed by the <code>__member__</code> function.</p>
+</dd>
+
+<dt>gfn <code>__array__</code>(<var>value</var>, ...);<br>
+keyret <code>__array__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
+int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Create an array from an array literal expression
+(<code>[&nbsp;]</code>) or from rest-arguments.</p>
+
+<p>When called to handle rest-arguments, <code>__array__</code> only receives
+the values that should be collected into the rest-argument. If not enough
+arguments are passed to the rest-argument function, <code>__array__</code>
+will receive no arguments (<code><var>argc</var></code> will be 0). There
+is no way for the <code>__array__</code> function to tell if it's being
+called to handle rest-arguments or an array literal.</p>
+</dd>
+
+<dt>gfn <code>__object__</code>(<var>key</var>, <var>value</var>, ...);<br>
+keyret <code>__object__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
+int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Create an object from an object literal expression (<code>{&nbsp;}</code>).
+The keys may be of any type, including <code>undef</code>. There is no way to
+tell the difference between a string key and an identifier key. There is
+always an even number of arguments.</p>
 </dd>
 
 </dl>
@@ -332,346 +447,550 @@ execution, returning the error to the script's caller.</p>
 (<code>""</code>), and custom types of value <code>NULL</code> are false.
 Anything else is true.</p>
 
-<p>Every expression results in a value. Boolean results are represented by
-the integers zero (false) or one (true).</p>
-
-<p>The equal (<code>==</code>), not-equal (<code>!=</code>), and logical-not
-(<code>!</code>) operators work on integers and strings. The other operators
-only work on integers.</p>
-
-<p>The default operators may be replaced by the user.</p>
+<p>Boolean results are represented by the integers 0 (false) or 1 (true).</p>
 
 <h2>The C API</h2>
 
-<p>The <code>key.h</code> header includes <code>stdbool.h</code> and
-<code>stddef.h</code>.</p>
+<p>The <code>key.h</code> header includes <code>stddef.h</code> because I like
+<code>size_t</code>. There's also a certain joy in knowing <code>NULL</code>
+is defined. (Don't worry, dearest macro; my love is as constant as thou.)</p>
 
-<h3>typedef enum keyret_e;</h3>
-
-<p>And enum returned by various functions, indicating error and continuation
-status.</p>
+<h3>Types</h3>
 
 <dl>
 
-<dt>KEY_OK</dt>
+<dt>typedef enum keyret <code>keyret</code>;</dt>
 <dd>
-<p>The operation completed successfully.</p>
+<p>An enumeration returned by various functions, indicating error and
+continuation status.</p>
+
+<table class="enum">
+
+<tr><th>KEY_OK</th>
+<td>The operation completed successfully.</td>
+</tr>
+
+<tr><th>KEY_PAUSE</th>
+<td>The script is done for now but can be continued later. (Only returned from
+<code>keyenv_run</code> and native functions.)</td>
+</tr>
+
+<tr><th>KEY_ERROR</th>
+<td>There was an error. A descriptive message will be in
+<code>key_errmsg</code>.</td>
+</tr>
+
+</table>
 </dd>
 
-<dt>KEY_PAUSE</dt>
+<dt>typedef enum keytype <code>keytype</code>;</dt>
 <dd>
-<p>The script is done for now but can be continued later. (Only returned from
-<code>keyenv_run</code>.)</p>
+<p>An enumeration containing the type of the value stored in the
+<code>type</code> member of a <code>keyval</code>. New types can
+be added by calling <code>keyval_custom_type</code>.</p>
+
+<table class="enum">
+
+<tr><th>KEY_UNDEF</th>
+<td>The value is undefined.</td>
+</tr>
+
+<tr><th>KEY_INT</th>
+<td>The value is an integer, which can be found in the <code>ival</code>
+member of the <code>keyval</code>.</td>
+</tr>
+
+<tr><th>KEY_STR</th>
+<td>The value is an interned string, which can be found in the <code>sval</code>
+member of the <code>keyval</code>.</td>
+</tr>
+
+</table>
 </dd>
 
-<dt>KEY_ERROR</dt>
+<dt>typedef struct keyval <code>keyval</code>;</dt>
 <dd>
-<p>There was an error. A descriptive message will be in
-<code>key_errmsg</code>.</p>
+<p>A tagged union treated as a value type, containing the various types and
+their values. Members include:</p>
+
+<table class="enum">
+
+<tr><th>keytype type;</th>
+<td>The type of the value.</td>
+</tr>
+
+<tr><th>int ival;</th>
+<td>An integer value, if <code>type</code> is <code>KEY_INT</code>.</td>
+</tr>
+
+<tr><th>const char * sval;</th>
+<td>A string, most likely interned, if <code>type</code> is
+<code>KEY_STR</code>.</td>
+</tr>
+
+<tr><th>void * pval;</th>
+<td>A pointer to a value of custom type, if <code>type</code> is a custom
+type handle.</td>
+</tr>
+
+</table>
 </dd>
 
-</dl>
+<dt>typedef struct keyenv <code>keyenv</code>;</dt>
+<dd>
+<p>A script environment, containing the symbols defined in a script file
+and the execution context information. Only one thread of execution is
+allowed per file, but interrupt (signal-like) functions may be invoked.</p>
+</dd>
 
-<h3>char key_errmsg[];</h3>
-
-<p>A short message describing the most recent error.</p>
-
-<h3>keyret_e key_error(const char * fmt, ...);</h3>
-
-<p>Formats a message into <code>key_errmsg</code> and returns
-<code>KEY_ERROR</code>.</p>
-
-<h3>keyret_e key_intern(const char ** dst, const char * src);</h3>
-
-<p>Inserts the string <code>src</code> into the intern table. A pointer
-to the interned string's location will be returned in <code>dst</code>.
-Strings passed to Key functions do not have to be interned.</p>
-
-<h3>size_t key_escape(char * dst, size_t dstlen, const char * src);</h3>
-
-<p>Converts the string <code>src</code> to have back-slash escapes
-consistent with KeyLang string literals. If <code>dstlen</code> is 0,
-<code>dst</code> may be <code>NULL</code>. The return value is the size
-needed to store the resulting string (i.e., the index of the terminating
-nil byte).</p>
-
-<h3>typedef keyret_e (*key_native_fn)(keyenv * e, keyval * rv, int argc, const keyval * argv);</h3>
-
+<dt>typedef keyret (*<code>key_native_fn</code>)(keyenv * <var>e</var>,
+keyval * <var>rv</var>, int <var>argc</var>, const keyval *
+<var>argv</var>);</dt>
+<dd>
 <p>The signature of native callback functions. The environment of the
 running script is in <code>e</code>. The return value of the function
 or operator is stored in the <code>keyval</code> pointed to by
-<code>rv</code>. The arguments to the function or operator are in
-<code>argv</code> which is <code>argc</code> members in length.</p>
+<code><var>rv</var></code>. The arguments to the function or operator are in
+<code><var>argv</var></code> which is <code><var>argc</var></code> members
+in length. The first argument is in <code><var>argv</var>[0]</code>.</p>
 
-<p>The function may return <code>KEY_PAUSE</code> to pause evaluation
+<p>If a function is assigned to a member of a custom object and is called
+as a method, the custom object will be passed as the first argument, which
+is consistent with Uniform Function Call Syntax.</p>
+
+<p>The function may return <code>KEY_PAUSE</code> to pause execution
 of the script or <code>KEY_ERROR</code> to stop. If everything
 finished successfully, <code>KEY_OK</code> should be returned.</p>
-
-<h3>typedef enum keyval_e;</h3>
-
-<p>An enumeration containing the type of the value stored in the
-<code>type</code> member of a <code>keyval</code>. New types can
-be added by calling <code>keyval_custom_handle</code>.</p>
-
-<dl>
-
-<dt>KEY_UNDEF</dt>
-<dd>
-<p>The value is undefined.</p>
-</dd>
-
-<dt>KEY_INT</dt>
-<dd>
-<p>The value is an integer, which can be found in the <code>ival</code>
-member of the <code>keyval</code>.</p>
-</dd>
-
-<dt>KEY_STR</dt>
-<dd>
-<p>
-<p>The value is an interned string, which can be found in the <code>sval</code>
-member of the <code>keyval</code>.</p>
-</p>
 </dd>
 
 </dl>
 
-<h3>typedef struct keyval;</h3>
-
-<p>A tagged union containing various types and values. Members include:</p>
+<h3>Global Variables</h3>
 
 <dl>
 
-<dt>int ival;</dt>
+<dt>char <code>key_errmsg</code>[];</dt>
 <dd>
-<p>An integer.</p>
-</dd>
-
-<dt>const char * sval;</dt>
-<dd>
-<p>An interned string.</p>
-</dd>
-
-<dt>void * pval;</dt>
-<dd>
-<p>A custom type, for use with <code>keyval_custom_handle</code>.</p>
+<p>A short message describing the most recent error. At least it's not
+<em>exactly</em> like <code>errno</code>.</p>
 </dd>
 
 </dl>
 
-<h3>#define keyval_undef()</h3>
+<h3>Macros</h3>
 
+<dl>
+
+<dt>#define <code>keyval_undef</code>()</dt>
+<dd>
 <p>Returns a <code>keyval</code> of type <code>KEY_UNDEF</code>.</p>
+</dd>
 
-<h3>#define keyval_int(V)</h3>
-
+<dt>#define <code>keyval_int</code>(<var>V</var>)</dt>
+<dd>
 <p>Returns a <code>keyval</code> of type <code>KEY_INT</code>
-with value <code>V</code>.</p>
+with <code>ival</code> value <code><var>V</var></code>.</p>
+</dd>
 
-<h3>#define keyval_str(V)</h3>
-
+<dt>#define <code>keyval_str</code>(<var>V</var>)</dt>
+<dd>
 <p>Returns a <code>keyval</code> of type <code>KEY_STR</code>
-with value <code>V</code>, which should be interned.</p>
+with <code>sval</code> value <code><var>V</var></code>. Interning the
+string before passing it to this macro is encouraged but not required.</p>
+</dd>
 
-<h3>#define keyval_custom(T,V)</h3>
+<dt>#define <code>keyval_custom</code>(<var>T</var>,<var>V</var>)</dt>
+<dd>
+<p>Returns a <code>keyval</code> of type <code><var>T</var></code> with
+<code>pval</code> value <code><var>V</var></code>.</p>
+</dd>
 
-<p>Returns a custom-typed <code>keyval</code> of type <code>T</code>
-with value <code>V</code>.</p>
+</dl>
 
-<h3>bool keyval_tobool(keyval a);</h3>
+<h3>Error Handling Functions</h3>
 
+<dl>
+
+<dt>keyret <code>key_error</code>(const char * <var>fmt</var>, ...);</dt>
+<dd>
+<p>Record an error in <code>key_errmsg</code> and returns
+<code>KEY_ERROR</code>.</p>
+</dd>
+
+<dt>keyret <code>key_type_error</code>(keyval <var>a</var>);</dt>
+<dd>
+<p>Record an error for an object of the incorrect type. Always returns
+<code>KEY_ERROR</code>.</p>
+</dd>
+
+<dt>keyret <code>key_type_require</code>(keyval <var>a</var>, keytype
+<var>type</var>);</dt>
+<dd>
+<p>Record an error if the object's type is not <code><var>type</var></code>.
+Returns <code>KEY_OK</code> if the types match, <code>KEY_ERROR</code> if
+not.</p>
+</dd>
+
+<dt>keyret <code>key_type_require_fn</code>(keyval <var>a</var>);</dt>
+<dd>
+<p>Record an error if the object's type is not a script function or
+native function. Returns <code>KEY_OK</code> if it is a function,
+<code>KEY_ERROR</code> if not.</p>
+</dd>
+
+<dt>size_t <code>keyenv_stack_trace</code>(const keyenv * <var>e</var>,
+char * <var>buf</var>, size_t <var>buflen</var>);</dt>
+<dd>
+<p>Write a stack trace for the environment into the buffer. It's just a list
+of function names formatted as &ldquo;<code>in&nbsp;name:\n</code>&rdquo;.
+The message in <code>key_errmsg</code> is not appended nor modified.
+<code><var>buf</var></code> may be <code>NULL</code> if
+<code><var>buflen</var></code> is 0. The return value is
+the number of bytes needed for the resulting string.</p>
+</dd>
+
+<dt>void <code>key_print_stats</code>(void);</dt>
+<dd>
+<p>Print a list of usage statistics to <code>stdout</code>. If the
+compile-time option <code>TRACK_USAGES</code> was disabled, this
+function will only print the size of the <code>keyenv</code> struct.
+If enabled, it will print the amount of string internment room used,
+the number of global variables defined, and the maximum stack lengths
+for all environments (the environments must have been destroyed with
+<code>keyenv_delete</code> for their maximum lengths to be recorded).</p>
+</dd>
+
+</dl>
+
+<h3>Type Functions</h3>
+
+<dl>
+
+<dt>keytype <code>keyval_custom_type</code>(const char * <var>name</var>);</dt>
+<dd>
+<p>Register a new <code>keytype</code> value for use as the <code>type</code>
+of a <code>keyval</code>. Returns 0 if the type could not be registered. The
+name must be unique among the type names and will be interned.</p>
+</dd>
+
+<dt>int <code>keyval_tobool</code>(keyval <var>a</var>);</dt>
+<dd>
 <p>Converts a <code>keyval</code> to a boolean. Undefined, integer zero,
 the empty string, and custom types with value <code>NULL</code> are
 false. Everything else is true.</p>
+</dd>
 
-<h3>bool keyval_equal(keyval a, keyval b);</h3>
-
-<p>Compares two <code>keyval</code>s for equality. No type conversion
+<dt>int <code>keyval_equal</code>(keyval <var>a</var>, keyval
+<var>b</var>);</dt>
+<dd>
+<p>Compares two <code>keyval</code> values for equality. No type conversion
 is performed. Two arguments of different type never compare equal.
 Custom types are compared for reference equality only.</p>
+</dd>
 
-<h3>keyval_e keyval_custom_handle(void);</h3>
+</dl>
 
-<p>Generate a new <code>keyval_e</code> value for use as the type of a
-<code>keyval</code>. It's just a number. Each call returns a new value.</p>
+<h3>String Functions</h3>
 
-<h3>keyret_e key_native_assign(const char * name, key_native_fn eval);</h3>
+<dl>
 
-<p>Register an assignment operator. The <code>eval</code> function will
-recieve the two arguments in <code>argv</code> and return the result of
-the operation in <code>rv</code>. The actual assignment will be performed
-by the script, allowing an assignment operator and an infix operator to
-share a callback.</p>
+<dt>keyret <code>key_intern</code>(const char ** <var>dst</var>, const char *
+<var>src</var>);</dt>
+<dd>
+<p>Inserts the string <code><var>src</var></code> into the intern table.
+A pointer to the interned string's location will be returned in
+<code><var>dst</var></code>. Strings passed to Key functions do
+not have to be interned.</p>
+</dd>
 
-<h3>keyret_e key_native_shortfix(const char * name, key_native_fn eval);</h3>
+<dt>size_t <code>key_escape</code>(char * <var>dst</var>, size_t
+<var>dstlen</var>, const char * <var>src</var>);</dt>
+<dd>
+<p>Converts the string <code><var>src</var></code> to have back-slashed escapes
+consistent with KeyLang string literals. If <code><var>dstlen</var></code>
+is 0, <code><var>dst</var></code> may be <code>NULL</code>. The return value
+is the size needed to store the resulting string (i.e., the index of the
+terminating nil byte).</p>
+</dd>
 
-<p>Register a short-circuited operator. The <code>eval</code> function will
-recieve the value of the left-hand side in <code>argv</code> and should return
-a boolean in <code>rv</code>: true to evaluate the right-hand side, false to
-keep the left-hand value.</p>
+</dl>
 
-<h3>keyret_e key_native_infix(const char * name, bool allowPrefix, key_native_fn eval);</h3>
+<h3>Environment Functions</h3>
 
-<p>Register an infix operator. The <code>eval</code> function will
-recieve the two arguments in <code>argv</code> and return the result of
-the operation in <code>rv</code>. An infix operator may also be used in
-prefix position if <code>allowPrefix</code> is true. The callback will
-recieve only one argument if called as a prefix operator.</p>
+<dl>
 
-<h3>keyret_e key_native_prefix(const char * name, key_native_fn eval);</h3>
-
-<p>Register a prefix operator. The <code>eval</code> function will
-recieve the argument in <code>argv</code> and return the result of
-the operation in <code>rv</code>.</p>
-
-<h3>keyret_e key_native_func(const char * name, key_native_fn eval);</h3>
-
-<p>Register a function. The <code>eval</code> function will recieve the
-argument in <code>argv</code> and return the result of the function in
-<code>rv</code>. A function may recieve any number or type of arguments.</p>
-
-<h3>keyret_e key_native_defaults(void);</h3>
-
-<p>Called to register the default operator and function set. Without this,
-the language only has simple assignment, function calls, and the comma
-operator.</p>
-
-<h3>typedef struct keyenv;</h3>
-
-<p>A script environment, containing the symbols defined in a script file
-and the execution context information. Only one thread of execution is
-allowed per file.</p>
-
-<h3>keyret_e keyenv_new(keyenv ** ep, const char * src, const char * fname, int line);</h3>
-
+<dt>keyret <code>keyenv_new</code>(keyenv ** <var>ep</var>, const char *
+<var>src</var>, const char * <var>fname</var>, int <var>line</var>);</dt>
+<dd>
 <p>Allocate and initialize a new environment with the KeyLang source code
-<code>src</code>. The <code>fname</code> and <code>line</code> arguments are
-used for error messages during compilation. <code>line</code> should be one
-for the first line of a file.</p>
+<code><var>src</var></code>. The <code><var>fname</var></code> and
+<code><var>line</var></code> arguments are used for error messages during
+compilation. <code><var>line</var></code> should be 1 for the first line
+of a file.</p>
 
-<h3>void keyenv_delete(keyenv * e);</h3>
+<p>The contents of the file will not be executed. The top-level of code
+(mostly variable and function definitions) will be queued for execution.
+<code>keyenv_run</code> should be called until <code>KEY_PAUSE</code> is no
+longer returned before performing any other operation on the environment.</p>
 
+<div class="example">
+<pre>
+keyenv * e;
+/* load file */
+keyenv_new(&amp;e, "fn main() return 5;", "main.key", 1);
+/* define 'main' */
+while (keyenv_run(e) == KEY_PAUSE) /**/;
+/* call 'main' */
+keyenv_push(e, "main", 0, NULL);
+while (keyenv_run(e) == KEY_PAUSE) /**/;
+</pre>
+</div>
+</dd>
+
+<dt>void <code>keyenv_delete</code>(keyenv * <var>e</var>);</dt>
+<dd>
 <p>Deallocate the resources for an environement.</p>
+</dd>
 
-<h3>void keyenv_reset(keyenv * e);</h3>
+<dt>keyret <code>keyenv_run</code>(keyenv * <var>e</var>);</dt>
+<dd>
+<p>Execute a script until it completes (<code>KEY_OK</code>), encounters
+an error (<code>KEY_ERROR</code>), or pauses (<code>KEY_PAUSE</code>).</p>
 
-<p>Reset the execution context so that it is not in the middle of executing
+<p>This function may be used to resume a paused environment. The return
+value of the pausing function will be <code>undef</code>.</p>
+</dd>
+
+<dt>int <code>keyenv_running</code>(const keyenv * <var>e</var>);</dt>
+<dd>
+<p>Returns true if the environment has not completed executing. This is true
+for environments that have been paused or have encountered an error.</p>
+</dd>
+
+<dt>void <code>keyenv_reset</code>(keyenv * <var>e</var>);</dt>
+<dd>
+<p>Reset the execution context so that it's not in the middle of executing
 anything.</p>
+</dd>
 
-<h3>keyret_e keyenv_resume(keyenv * e, keyval rv);</h3>
-
+<dt>keyret <code>keyenv_resume</code>(keyenv * <var>e</var>, keyval
+<var>rv</var>);</dt>
+<dd>
 <p>Return a value to a paused environment. This should only be called on
 an evironment that has been paused by returning <code>KEY_PAUSE</code>
-from a registered function or operator.</p>
+from a native function.</p>
+</dd>
 
-<h3>keyret_e keyenv_run(keyenv * e);</h3>
+<dt>keyret <code>keyenv_push</code>(keyenv * <var>e</var>, const char *
+<var>name</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Start a call to a script function in an environment. The environment
+must not be running. The function call won't be performed until
+<code>keyenv_run</code> is called. This should only be used on
+environments that are not currently running.</p>
+</dd>
 
-<p>Execute a script until it completes (<code>KEY_OK</code>), encounters
-an error (<code>KEY_ERROR</code>), or pauses (<code>KEY_PAUSE</code>). If
-an error is encountered, the script environment will be reset.</p>
+<dt>keyret <code>keyenv_interrupt</code>(keyenv * <var>e</var>, const char *
+<var>name</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Start a call to a script function in an environment. The environment
+may be running. The return value will not be available. The function call
+won't be performed until <code>keyenv_run</code> is called. Resumed execution
+will continue past the interrupt's completion. This is useful for inserting
+events into a script environment.</p>
+</dd>
 
-<h3>bool keyenv_running(const keyenv * e);</h3>
+<dt>keyret <code>keyenv_callback</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>, keyval <var>func</var>, int <var>argc</var>, const keyval *
+<var>argv</var>);</dt>
+<dd>
+<p>Run a script function or native function to completion. The function cannot
+pause. The function is called immediately and its return value is placed into
+<code><var>rv</var></code>. This is useful for implementing native functions
+that take functions as arguments, such as sorting functions.</p>
+</dd>
 
-<p>Returns true if the environment has not completed executing. An environment
-that has not completed executing cannot have certain functions called
-on it.</p>
-
-<h3>keyret_e keyenv_push(keyenv * e, const char * name, int argc, const keyval * argv);</h3>
-
-<p>Start a call to a script function in an environment. The environment cannot
-be running. The function call won't be perfomed until <code>keyenv_run</code>
-is called.</p>
-
-<h3>keyret_e keyenv_pop(keyenv * e, keyval * rv);</h3>
-
-<p>Pop a return value from an environment. This should only be called once
-on an environement that has finished running a function called by
+<dt>keyret <code>keyenv_pop</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>);</dt>
+<dd>
+<p>Pop a return value from an environment. This should only be called once,
+on an environement that has finished executing a function called by
 <code>keyenv_push</code>.</p>
+</dd>
 
-<h3>bool keyenv_has(const keyenv * e, const char * name);</h3>
+<dt>int <code>keyenv_has</code>(const keyenv * <var>e</var>, const char *
+<var>name</var>);</dt>
+<dd>
+<p>Returns true if <code><var>name</var></code> is found in the environment.
+If the environment is running, the currently active local scope will be checked
+before the file scope.</p>
+</dd>
 
-<p>Returns true if <code>name</code> is found in the environment. This
-function should only be called on an environment that is not running.</p>
+<dt>keyret <code>keyenv_get</code>(const keyenv * <var>e</var>, const char *
+<var>name</var>, keyval * <var>valp</var>);</dt>
+<dd>
+<p>Retrieves the value of <code><var>name</var></code>. If the environment
+is running, the currently active local scope will be checked before the
+file scope.</p>
+</dd>
 
-<h3>keyret_e keyenv_get(const keyenv * e, const char * name, keyval * valp);</h3>
+<dt>keyret <code>keyenv_set</code>(keyenv * <var>e</var>, const char *
+<var>name</var>, keyval <var>val</var>);</dt>
+<dd>
+<p>Sets the value of <code><var>name</var></code> if found. If the
+environment is running, the currently active local scope will be checked
+before the file scope.</p>
+</dd>
 
-<p>Retrieves the value of <code>name</code> if it is found in the environment,
-or an error if it is not found. This function should only be called on an
-environment that is not running.</p>
+<dt>keyret <code>keyenv_def</code>(keyenv * <var>e</var>, const char *
+<var>name</var>, keyval <var>val</var>);</dt>
+<dd>
+<p>Defines <code><var>name</var></code> and its value if not already defined.
+If the environment is running, <code><var>name</var></code> will be in the
+currently active local scope, otherwise <code><var>name</var></code> is
+file scope.</p>
+</dd>
 
-<h3>keyret_e keyenv_set(keyenv * e, const char * name, keyval val);</h3>
+</dl>
 
-<p>Sets the value of <code>name</code> if it is found in the environment,
-or returns an error if it is not found. This function should only be called
-on an environment that is not running.</p>
+<h3>Global Environment Functions</h3>
 
-<h3>keyret_e keyenv_def(keyenv * e, const char * name, keyval val);</h3>
+<dl>
 
-<p>Defines <code>name</code> and its value if <code>name</code> is not
-found in the environment, or returns an error if it is already defined.
-This function should only be called on an environment that is not running.</p>
+<dt>int <code>key_global_has</code>(const char * <var>name</var>);</dt>
+<dd>
+<p>Returns true if <code><var>name</var></code> is defined in the global
+environment.</p>
+</dd>
 
-<h3>bool key_global_has(const char * name);</h3>
+<dt>keyret <code>key_global_get</code>(const char * <var>name</var>, keyval *
+<var>valp</var>);</dt>
+<dd>
+<p>Retrieves the value of <code><var>name</var></code> if it is defined
+in the global environment, or an error if it is not found.</p>
+</dd>
 
-<p>Returns true if <code>name</code> is found in the global environment.</p>
+<dt>keyret <code>key_global_set</code>(const char * <var>name</var>, keyval
+<var>val</var>);</dt>
+<dd>
+<p>Sets the value of <code><var>name</var></code> to
+<code><var>val</var></code> if it is defined in the global
+environment, or returns an error if it is not defined.</p>
+</dd>
 
-<h3>keyret_e key_global_get(const char * name, keyval * valp);</h3>
+<dt>keyret <code>key_global_def</code>(const char * <var>name</var>, keyval
+<var>val</var>);</dt>
+<dd>
+<p>Defines the variable <code><var>name</var></code> with the value of
+<code><var>val</var></code> if not defined in the global environment,
+or returns an error if it is already defined.</p>
+</dd>
 
-<p>Retrieves the value of <code>name</code> if it is found in the global
-environment, or an error if it is not found.</p>
+<dt>keyret <code>key_global_fndef</code>(const char * <var>name</var>,
+key_native_fn <var>eval</var>);</dt>
+<dd>
+<p>Define the variable <code><var>name</var></code> to the native function
+<code><var>eval</var></code> if not defined in the global environment,
+or returns an error if it is already defined.</p>
+</dd>
 
-<h3>keyret_e key_global_set(const char * name, keyval val);</h3>
+<dt>keyret <code>key_global_defaults</code>(void);</dt>
+<dd>
+<p>Called to define the default function set.</p>
+</dd>
 
-<p>Sets the value of <code>name</code> if it is found in the global
-environment, or returns an error if it is not found.</p>
+</dl>
 
-<h3>keyret_e key_global_def(const char * name, keyval val);</h3>
+<h3>Native Functions</h3>
 
-<p>Defines <code>name</code> and its value if <code>name</code> is not found
-in the global environment, or returns an error if it is already defined.</p>
+<p>The default native function set. These are all defined by
+<code>key_global_defaults</code> but may be defined using
+any name with <code>key_global_fndef</code>.</p>
+
+<dl>
+
+<dt>keyret <code>key_default_fail</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Defined as <code>fail</code> by <code>key_global_defaults</code>.</p>
+</dd>
+
+<dt>keyret <code>key_default_debug</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Defined as <code>debug</code> by <code>key_global_defaults</code>.</p>
+</dd>
+
+<dt>keyret <code>key_default_trace</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Defined as <code>trace</code> by <code>key_global_defaults</code>.</p>
+</dd>
+
+<dt>keyret <code>key_default_pause</code>(keyenv * <var>e</var>, keyval *
+<var>rv</var>, int <var>argc</var>, const keyval * <var>argv</var>);</dt>
+<dd>
+<p>Defined as <code>pause</code> by <code>key_global_defaults</code>.</p>
+</dd>
+
+</dl>
 
 <h2>Compile-time Options</h2>
 
 <p>These macros are defined and can be redefined in the <code>key.c</code>
-file.</p>
+file. They are not part of the run-time API.</p>
 
-<h3>#define ERROR_BUFLEN (128)</h3>
+<dl>
 
+<dt>#define <code>ERROR_BUFLEN</code> (128)</dt>
+<dd>
 <p>The length of the error message buffer <code>key_errmsg</code>,
 in bytes.</p>
+</dd>
 
-<h3>#define TOKEN_BUFLEN (1024)</h3>
-
+<dt>#define <code>TOKEN_BUFLEN</code> (1024)</dt>
+<dd>
 <p>The maximum length of a script token, in bytes. This includes string
 literals.</p>
+</dd>
 
-<h3>#define INTERN_BUFLEN (16 * 1024)</h3>
-
+<dt>#define <code>INTERN_BUFLEN</code> (16 * 1024)</dt>
+<dd>
 <p>Storage space for interned string, in bytes.</p>
+</dd>
 
-<h3>#define NATIVEDEF_MAX (256)</h3>
-
-<p>Maximum number of native functions and operators that can be registered.</p>
-
-<h3>#define GLOBAL_MAX (128)</h3>
-
+<dt>#define <code>GLOBAL_MAX</code> (128)</dt>
+<dd>
 <p>Maximum number of global variables and functions that can be defined.</p>
+</dd>
 
-<h3>#define OPER_DEPTH (128)</h3>
-
+<dt>#define <code>OPER_DEPTH</code> (128)</dt>
+<dd>
 <p>Size of a script environment's operand stack. Bigger numbers allow more
 complex expressions.</p>
+</dd>
 
-<h3>#define SCOPE_DEPTH (256)</h3>
-
+<dt>#define <code>SCOPE_DEPTH</code> (256)</dt>
+<dd>
 <p>Size of a script environment's file and local scope stack. Bigger
 numbers allow deeper nesting of function calls with lots of local
 variables.</p>
+</dd>
 
-<h3>#define EXEC_DEPTH (128)</h3>
-
+<dt>#define <code>EXEC_DEPTH</code> (128)</dt>
+<dd>
 <p>Size of the execution stack. Bigger numbers allow deeper nesting of
 script function calls and loops.</p>
+</dd>
+
+<dt>#define <code>TRACK_USAGES</code> (0)</dt>
+<dd>
+<p>Enable or disable recording usage statistics for many of the
+compile-time options. Call <code>key_print_stats</code> to print
+the statistics.</p>
+</dd>
+
+</dl>
 
 <hr>
 </body>
