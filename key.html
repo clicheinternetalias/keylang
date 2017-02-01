@@ -122,10 +122,9 @@ extended characters (Unicode or whatever). Identifiers cannot start
 with a digit.</p>
 
 <p><b>Keywords:</b> <code>break</code>, <code>continue</code>, <code>do</code>,
-<code>else</code>, <code>fn</code>, <code>for</code>, <code>gfn</code>,
-<code>gvar</code>, <code>if</code>, <code>is</code>, <code>isnot</code>,
-<code>return</code>, <code>typeof</code>, <code>undef</code>, <code>var</code>,
-<code>while</code>.</p>
+<code>else</code>, <code>fn</code>, <code>for</code>, <code>if</code>,
+<code>is</code>, <code>isnot</code>, <code>return</code>, <code>typeof</code>,
+<code>undef</code>, <code>var</code>, <code>while</code>.</p>
 
 <p><b>Type names:</b> <code>undef</code>, <code>int</code>,
 <code>string</code>, <code>native</code> (C function),
@@ -223,22 +222,17 @@ their own section.</p>
 
 <div class="example">
 <pre>
-gvar foo = 5;
+var foo = 5;
 var bar = "happy times!";
 
 fn doTheThing(a,b,c) {
   var d = a + b;
   return c * d;
 }
-gfn globalstuff(a) return a + 5;
-var baz = 3 + 5; // error
+fn stuff(a) return a + 5;
+var baz = 3 + 5;
 </pre>
 </div>
-
-<p><code>gvar</code> and <code>gfn</code> are globally defined variants
-of file-scoped or locally-scoped <code>var</code> and <code>fn</code>.
-<code>gvar</code> and <code>gfn</code> are allowed only at top-level
-(and not even in the body of a top-level <code>if</code>).</p>
 
 <p>Statement types include:</p>
 
@@ -278,11 +272,10 @@ a value is not given, the function returns <code>undef</code>.</p>
 
 <dt><code>var</code> <var>ident</var>;<br>
 <code>var</code> <var>ident</var> = <var>expr</var>;<br>
-<code>gvar</code> <var>ident</var>, <var>ident</var> = <var>expr</var>;</dt>
+<code>var</code> <var>ident</var>, <var>ident</var> = <var>expr</var>;</dt>
 <dd>
 <p>Declare locally-scoped variables inside a function; or, if at top-level,
-file-scoped variables. The <code>gvar</code> variant declares the
-variable in global scope.</p>
+file-scoped variables.</p>
 
 <p>The <code>var</code> statement may contain one or more identifiers,
 with optional values, separated by commas. Variables must be declared
@@ -307,8 +300,9 @@ before use, and cannot be declared multiple times.</p>
 </dd>
 
 <dt><code>fn</code> <var>ident</var>() <var>statement</var><br>
-<code>fn</code> <var>ident</var>(<var>arg1</var>...) <var>statement</var><br>
-<code>gfn</code> <var>ident</var>(<var>arg1</var>,<var>arg2</var>)
+<code>fn</code> <var>ident</var>(<var>arg1</var>,<var>arg2</var>)
+<var>statement</var><br>
+<code>fn</code> <var>ident</var>(<var>arg1</var>,<var>arg2</var>...)
 <var>statement</var></dt>
 <dd>
 <p>Declare a function with name <var>ident</var>. Functions can have any
@@ -346,17 +340,34 @@ an error about <code>__array__</code> being undefined).</p>
 
 <h3>Variable Scope</h3>
 
-<p>Values delcared using <code>gfn</code> or <code>gvar</code> in any file
-are in global scope and will be available to all script environments. Values
-declared at top-level in a file using <code>fn</code> or <code>var</code> are
-file-scoped. Values declared inside a function are locally-scoped to that
-function. There is no block scope.</p>
+<p>Values and functions defined through the <code>key_global_*</code> functions
+are available to all script environments. Values declared at top-level in a
+file are file-scoped. Values declared inside a function are locally-scoped to
+that function. There is no block-level scope.</p>
 
 <p>A function defined inside another function does not have access to
 variables in the containing function (i.e., no closures).</p>
 
-<p>Variable names are not allowed to shadow file-scoped or globally-scoped
-names.</p>
+<p>Names are not allowed to shadow names in outer scopes. A locally-scoped
+variable cannot have the same name as a file-scoped variable, and a file-scoped
+variable cannot have the same name as a globally-scoped variable. Nested
+functions may shadow names defined in the enclosing function because the
+enclosing function's scope isn't available to the nested function.</p>
+
+<div class="example">
+<pre>
+// 'global_foo' is defined globally
+var foo = 5;
+fn bar(foo) { // error: 'foo' redeclared
+  var a = "local";
+  fn stuff() {
+    var a = 5; // okay
+    var foo = 4; // error
+    var global_foo; // error
+  }
+}
+</pre>
+</div>
 
 <h3>Default Functions</h3>
 
@@ -366,23 +377,23 @@ under other names.</p>
 
 <dl>
 
-<dt>gfn <code>fail</code>(...);</dt>
+<dt>fn <code>fail</code>(...);</dt>
 <dd>
 <p>Prints all arguments to <code>key_errmsg</code> then stops the script's
 execution, returning the error to the script's caller.</p>
 </dd>
 
-<dt>gfn <code>debug</code>(...);</dt>
+<dt>fn <code>debug</code>(...);</dt>
 <dd>
 <p>Prints all arguments to <code>stderr</code>, followed by a newline.</p>
 </dd>
 
-<dt>gfn <code>trace</code>();</dt>
+<dt>fn <code>trace</code>();</dt>
 <dd>
 <p>Prints the current stack trace to <code>stderr</code>.</p>
 </dd>
 
-<dt>gfn <code>pause</code>();</dt>
+<dt>fn <code>pause</code>();</dt>
 <dd>
 <p>Suspend execution of the script.</p>
 </dd>
@@ -397,7 +408,7 @@ are not defined by <code>key_global_defaults</code>.</p>
 
 <dl>
 
-<dt>gfn <code>__member__</code>(<var>object</var>, <var>member</var>,
+<dt>fn <code>__member__</code>(<var>object</var>, <var>member</var>,
 <var>value</var>);<br>
 keyret <code>__member__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
 int <var>argc</var>, const keyval * <var>argv</var>);</dt>
@@ -414,7 +425,7 @@ are handled by the scripting language, with the final simple assignment
 performed by the <code>__member__</code> function.</p>
 </dd>
 
-<dt>gfn <code>__array__</code>(<var>value</var>, ...);<br>
+<dt>fn <code>__array__</code>(<var>value</var>, ...);<br>
 keyret <code>__array__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
 int <var>argc</var>, const keyval * <var>argv</var>);</dt>
 <dd>
@@ -429,7 +440,7 @@ is no way for the <code>__array__</code> function to tell if it's being
 called to handle rest-arguments or an array literal.</p>
 </dd>
 
-<dt>gfn <code>__object__</code>(<var>key</var>, <var>value</var>, ...);<br>
+<dt>fn <code>__object__</code>(<var>key</var>, <var>value</var>, ...);<br>
 keyret <code>__object__</code>(keyenv * <var>e</var>, keyval * <var>rv</var>,
 int <var>argc</var>, const keyval * <var>argv</var>);</dt>
 <dd>
@@ -859,30 +870,30 @@ file scope.</p>
 
 <dt>int <code>key_global_has</code>(const char * <var>name</var>);</dt>
 <dd>
-<p>Returns true if <code><var>name</var></code> is defined in the global
-environment.</p>
+<p>Returns true if <code><var>name</var></code> is defined as a global
+value.</p>
 </dd>
 
 <dt>keyret <code>key_global_get</code>(const char * <var>name</var>, keyval *
 <var>valp</var>);</dt>
 <dd>
 <p>Retrieves the value of <code><var>name</var></code> if it is defined
-in the global environment, or an error if it is not found.</p>
+as a global value, or an error if it is not found.</p>
 </dd>
 
 <dt>keyret <code>key_global_set</code>(const char * <var>name</var>, keyval
 <var>val</var>);</dt>
 <dd>
 <p>Sets the value of <code><var>name</var></code> to
-<code><var>val</var></code> if it is defined in the global
-environment, or returns an error if it is not defined.</p>
+<code><var>val</var></code> if it is defined as a global value,
+or returns an error if it is not defined.</p>
 </dd>
 
 <dt>keyret <code>key_global_def</code>(const char * <var>name</var>, keyval
 <var>val</var>);</dt>
 <dd>
 <p>Defines the variable <code><var>name</var></code> with the value of
-<code><var>val</var></code> if not defined in the global environment,
+<code><var>val</var></code> if not defined as a global value,
 or returns an error if it is already defined.</p>
 </dd>
 
@@ -890,7 +901,7 @@ or returns an error if it is already defined.</p>
 key_native_fn <var>eval</var>);</dt>
 <dd>
 <p>Define the variable <code><var>name</var></code> to the native function
-<code><var>eval</var></code> if not defined in the global environment,
+<code><var>eval</var></code> if not defined as a global value,
 or returns an error if it is already defined.</p>
 </dd>
 

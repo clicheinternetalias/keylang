@@ -42,7 +42,7 @@ typedef enum token_e {
   /* lexical and ast */
   TOK_ADD, TOK_AND, TOK_ASSIGN, TOK_BREAK, TOK_COAL, TOK_CBRACE, TOK_CBRACK,
   TOK_COLON, TOK_COMMA, TOK_CONT, TOK_CPAREN, TOK_DIV, TOK_DO, TOK_DOT,
-  TOK_ELSE, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GFUNC, TOK_GT, TOK_GVAR,
+  TOK_ELSE, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GT,
   TOK_IDENT, TOK_IF, TOK_IS, TOK_ISNOT, TOK_INT, TOK_LOGAND, TOK_LOGNOT,
   TOK_LOGOR, TOK_LE, TOK_LSH, TOK_LT, TOK_MOD, TOK_MUL, TOK_OBRACE, TOK_OBRACK,
   TOK_OPAREN, TOK_OR, TOK_NE, TOK_NOT, TOK_QUEST, TOK_RETURN, TOK_RSH,
@@ -64,7 +64,7 @@ tok_string(token_t tk)
     ">>>=", "^=",
     "+", "&", "=", "break", "?\?", "}", "]",
     ":", ",", "continue", ")", "/", "do", ".",
-    "else", "==", "for", "fn", ">=", "gfn", ">", "gvar",
+    "else", "==", "for", "fn", ">=", ">",
     "identifier", "if", "is", "isnot", "integer", "&&", "!",
     "||", "<=", "<<", "<", "%", "*", "{", "[",
     "(", "|", "!=", "~", "?", "return", ">>",
@@ -122,7 +122,6 @@ static keyret bcode_continue(keyenv * e);
 static keyret bcode_call(keyenv * e);
 static keyret bcode_return(keyenv * e);
 static keyret bcode_var(keyenv * e);
-static keyret bcode_gvar(keyenv * e);
 static keyret bcode_defargs(keyenv * e);
 static keyret bcode_varargs(keyenv * e);
 static keyret bcode_add(keyenv * e);
@@ -391,8 +390,6 @@ lexer_next(token_t * type, char * buf, size_t buflen)
     else if (EQ("else")) *type = TOK_ELSE;
     else if (EQ("fn")) *type = TOK_FUNC;
     else if (EQ("for")) *type = TOK_FOR;
-    else if (EQ("gfn")) *type = TOK_GFUNC;
-    else if (EQ("gvar")) *type = TOK_GVAR;
     else if (EQ("if")) *type = TOK_IF;
     else if (EQ("is")) *type = TOK_IS;
     else if (EQ("isnot")) *type = TOK_ISNOT;
@@ -585,9 +582,9 @@ convert_int(int * n, const char * txt)
 
 static keyret parseExpr(node ** n);
 static keyret parseAssign(node ** n);
-static keyret parseStatement(node ** n, int top);
-static keyret parseStatements(node ** n, int top);
-static keyret parseFunction(node ** n, int isexpr, int isglobal);
+static keyret parseStatement(node ** n);
+static keyret parseStatements(node ** n);
+static keyret parseFunction(node ** n, int isexpr);
 
 static keyret consume(token_t tk, int * found) {
   *found = (parser.type == tk);
@@ -663,7 +660,7 @@ static keyret parsePrimary(node ** n) {
   else if (isType(TOK_INT))    { return newInt(n); }
   else if (isType(TOK_STRING)) { return newIntern(n, TOK_STRING); }
   else if (isType(TOK_UNDEF))  { *n = node_new_undef(); return NEXT(); }
-  else if (isType(TOK_FUNC))   { Q(NEXT()); return parseFunction(n, 1, 0); }
+  else if (isType(TOK_FUNC))   { Q(NEXT()); return parseFunction(n, 1); }
   else if (isType(TOK_OBRACE)) { Q(NEXT()); return parseObjectLit(n); }
   else if (isType(TOK_OBRACK)) { Q(NEXT()); return parseArrayLit(n); }
   else if (isType(TOK_OPAREN)) {
@@ -913,7 +910,7 @@ static keyret parseExpr(node ** n) {
   }
   return KEY_OK;
 }
-static keyret parseVarOne(node ** n, int isglobal) {
+static keyret parseVarOne(node ** n) {
   node * name = NULL;
   node * value = NULL;
   Q(parseIdent(&name)); Q(requireIdent(name));
@@ -921,15 +918,15 @@ static keyret parseVarOne(node ** n, int isglobal) {
     Q(parseAssign(&value));
     Q(require(value, "expression"));
   } }
-  *n = node_new2(isglobal ? TOK_GVAR : TOK_VAR, name, value);
+  *n = node_new2(TOK_VAR, name, value);
   return KEY_OK;
 }
-static keyret parseVar(node ** n, int isglobal) {
-  Q(parseVarOne(n, isglobal));
+static keyret parseVar(node ** n) {
+  Q(parseVarOne(n));
   while (*n) {
     { MATCH(TOK_COMMA) {
       node * m = NULL;
-      Q(parseVarOne(&m, isglobal)); Q(require(m, "declaration"));
+      Q(parseVarOne(&m)); Q(require(m, "declaration"));
       *n = node_new2(TOK_LIST, *n, m);
       continue;
     } }
@@ -943,10 +940,10 @@ static keyret parseIf(node ** n) {
   Q(expect(TOK_OPAREN));
   Q(parseExpr(&cond)); Q(require(cond, "condition"));
   Q(expect(TOK_CPAREN));
-  Q(parseStatement(&body, 0)); Q(require(body, "statement"));
+  Q(parseStatement(&body)); Q(require(body, "statement"));
   *n = node_new2(TOK_IF, cond, body);
   { MATCH(TOK_ELSE) {
-    Q(parseStatement(&((*n)->third), 0));
+    Q(parseStatement(&((*n)->third)));
     Q(require((*n)->third, "statement"));
   } }
   return KEY_OK;
@@ -984,7 +981,7 @@ static keyret makeName(node ** n) {
   *n = node_new_string(TOK_IDENT, p);
   return KEY_OK;
 }
-static keyret parseFunction(node ** n, int isexpr, int isglobal) {
+static keyret parseFunction(node ** n, int isexpr) {
   node * name = NULL;
   node * args = NULL;
   node * body = NULL;
@@ -995,9 +992,9 @@ static keyret parseFunction(node ** n, int isexpr, int isglobal) {
   Q(parseFunctionArglist(&args));
   Q(expect(TOK_CPAREN));
   parser.funcDepth++;
-  Q(parseStatement(&body, 0)); Q(require(body, "statement"));
+  Q(parseStatement(&body)); Q(require(body, "statement"));
   parser.funcDepth--;
-  token_t type = isexpr ? TOK_XFUNC : isglobal ? TOK_GFUNC : TOK_FUNC;
+  token_t type = isexpr ? TOK_XFUNC : TOK_FUNC;
   *n = node_new3(type, name, args, body);
   return KEY_OK;
 }
@@ -1005,7 +1002,7 @@ static keyret parseDo(node ** n) {
   node * body = NULL;
   node * cond = NULL;
   parser.loopDepth++;
-  Q(parseStatement(&body, 0)); Q(require(body, "statement"));
+  Q(parseStatement(&body)); Q(require(body, "statement"));
   parser.loopDepth--;
   Q(expect(TOK_WHILE));
   Q(expect(TOK_OPAREN));
@@ -1021,7 +1018,7 @@ static keyret parseWhile(node ** n) {
   Q(parseExpr(&cond)); Q(require(cond, "condition"));
   Q(expect(TOK_CPAREN));
   parser.loopDepth++;
-  Q(parseStatement(&body, 0)); Q(require(body, "statement"));
+  Q(parseStatement(&body)); Q(require(body, "statement"));
   parser.loopDepth--;
   *n = node_new2(TOK_WHILE, cond, body);
   return KEY_OK;
@@ -1042,13 +1039,13 @@ static keyret parseFor(node ** n) {
   if (inc) inc = node_new1(TOK_COMMA, inc); /* 'pop' the result */
   Q(expect(TOK_CPAREN));
   parser.loopDepth++;
-  Q(parseStatement(&body, 0)); Q(require(body, "statement"));
+  Q(parseStatement(&body)); Q(require(body, "statement"));
   parser.loopDepth--;
   *n = node_new4(TOK_FOR, init, cond, inc, body);
   return KEY_OK;
 }
 static keyret parseBlock(node ** n) {
-  Q(parseStatements(n, 0));
+  Q(parseStatements(n));
   if (!*n) *n = node_new0(TOK_LIST); /* nop; can't return NULL */
   return expect(TOK_CBRACE);
 }
@@ -1063,7 +1060,7 @@ static keyret parseBranch(node ** n, token_t tk) {
   *n = node_new0(tk);
   return expect(TOK_SEMI);
 }
-static keyret parseStatement(node ** n, int top) {
+static keyret parseStatement(node ** n) {
   { MATCH(TOK_BREAK)  { return parseBranch(n, TOK_BREAK); } }
   { MATCH(TOK_CONT)   { return parseBranch(n, TOK_CONT); } }
   { MATCH(TOK_DO)     { return parseDo(n); } }
@@ -1071,15 +1068,11 @@ static keyret parseStatement(node ** n, int top) {
   { MATCH(TOK_IF)     { return parseIf(n); } }
   { MATCH(TOK_OBRACE) { return parseBlock(n); } }
   { MATCH(TOK_RETURN) { return parseReturn(n); } }
-  { MATCH(TOK_VAR)    { return parseVar(n, 0); } }
+  { MATCH(TOK_VAR)    { return parseVar(n); } }
   { MATCH(TOK_WHILE)  { return parseWhile(n); } }
   { MATCH(TOK_SEMI)   { *n = node_new0(TOK_LIST); return KEY_OK; } }
-  { MATCH(TOK_FUNC)   { return parseFunction(n, 0, 0); } }
-  { MATCH(TOK_VAR)    { return parseVar(n, 0); } }
-  if (top) {
-    { MATCH(TOK_GFUNC) { return parseFunction(n, 0, 1); } }
-    { MATCH(TOK_GVAR)  { return parseVar(n, 1); } }
-  }
+  { MATCH(TOK_FUNC)   { return parseFunction(n, 0); } }
+  { MATCH(TOK_VAR)    { return parseVar(n); } }
   Q(parseExpr(n));
   if (*n) {
     *n = node_new1(TOK_COMMA, *n); /* 'pop' the result */
@@ -1087,11 +1080,11 @@ static keyret parseStatement(node ** n, int top) {
   }
   return KEY_OK;
 }
-static keyret parseStatements(node ** n, int top) {
-  Q(parseStatement(n, top));
+static keyret parseStatements(node ** n) {
+  Q(parseStatement(n));
   while (*n) {
     node * m = NULL;
-    Q(parseStatement(&m, top));
+    Q(parseStatement(&m));
     if (!m) break;
     *n = node_new2(TOK_LIST, *n, m);
   }
@@ -1107,7 +1100,7 @@ parser_parse(node ** n, const char * src, const char * fname, int line)
   parser.funcDepth = 0;
   *n = parser.chain = NULL;
   Q(NEXT()); /* initialize look-ahead */
-  err = parseStatements(n, 1);
+  err = parseStatements(n);
   if (!err) err = expect(TOK_EOF);
   if (err) {
     node_delete_chain(parser.chain);
@@ -1353,11 +1346,10 @@ static void compOne(const node * n) {
       break;
     }
 
-    case TOK_GVAR:
     case TOK_VAR: { /* ident expr? -> expr|undef str var */
       if (n->second) { compOne(n->second); } else { compPush(keyval_undef()); }
       compString(n->first);
-      compCode((n->type == TOK_VAR) ? bcode_var : bcode_gvar);
+      compCode(bcode_var);
       break;
     }
     case TOK_ARGLIST: { /* ident ident -> str str */
@@ -1368,7 +1360,6 @@ static void compOne(const node * n) {
       break;
     }
     case TOK_XFUNC:
-    case TOK_GFUNC:
     case TOK_FUNC: { /* name args body -> proc dup? name var */
       /* proc: name pop arg-names... arg-name-count defargs body */
       int va = n->second && n->second->type == TOK_VARARGS;
@@ -1383,7 +1374,7 @@ static void compOne(const node * n) {
       procEnd();
       if (n->type == TOK_XFUNC) compCode(bcode_dup);
       compString(n->first);
-      compCode((n->type == TOK_FUNC) ? bcode_var : bcode_gvar);
+      compCode(bcode_var);
       break;
     }
     default: break; /* noisy compiler */
@@ -1582,38 +1573,39 @@ static int scope_find(const stack * s, const char * name, keyval ** valp) {
   }
   return 0;
 }
-static keyret scope_find_full(const keyenv * e, const char * name, keyval ** valp) {
-  if (!scope_find(SCOPE, name, valp) && !scope_find(GLOBAL, name, valp))
-    return key_error("'%s' not defined", name);
-  return KEY_OK;
-}
-static keyret scope_make(stack * s, const char * name, keyval val) {
-  keyval * valp;
-  if (scope_find(s, name, &valp)) return key_error("'%s' redeclared", name);
-  Q(stk_push(s, keyval_str(name)));
-  return stk_push(s, val);
+static int scope_find_full(const keyenv * e, const char * name, keyval ** valp) {
+  return scope_find(SCOPE, name, valp) || scope_find(GLOBAL, name, valp);
 }
 
 static keyret scope_load(const keyenv * e, const char * name, keyval * valp) {
   keyval * p;
-  Q(scope_find_full(e, name, &p));
+  if (!scope_find_full(e, name, &p)) return key_error("'%s' not defined", name);
   *valp = *p;
   return KEY_OK;
 }
 static keyret scope_store(keyenv * e, const char * name, keyval val) {
   keyval * p;
-  Q(scope_find_full(e, name, &p));
+  if (!scope_find_full(e, name, &p)) return key_error("'%s' not defined", name);
   *p = val;
   return KEY_OK;
 }
+
+static keyret scope_make_(stack * s, const char * name, keyval val) {
+  Q(stk_push(s, keyval_str(name)));
+  return stk_push(s, val);
+}
 static keyret scope_gdef(const char * name, keyval val) {
+  keyval * valp;
+  if (scope_find(GLOBAL, name, &valp)) return key_error("'%s' redeclared", name);
 #if TRACK_USAGES
   global_max++;
 #endif
-  return scope_make(GLOBAL, name, val);
+  return scope_make_(GLOBAL, name, val);
 }
 static keyret scope_def(keyenv * e, const char * name, keyval val) {
-  return scope_make(SCOPE, name, val);
+  keyval * valp;
+  if (scope_find_full(e, name, &valp)) return key_error("'%s' redeclared", name);
+  return scope_make_(SCOPE, name, val);
 }
 
 /* ********************************************************************** */
@@ -1757,11 +1749,6 @@ static keyret bcode_var(keyenv * e) { /* val|proc str -> - */
   const char * name = stk_pop(OPER).sval;
   keyval val = stk_pop(OPER);
   return scope_def(e, name, val);
-}
-static keyret bcode_gvar(keyenv * e) { /* val|proc str -> - */
-  const char * name = stk_pop(OPER).sval;
-  keyval val = stk_pop(OPER);
-  return scope_gdef(name, val);
 }
 
 static keyret bcode_dup(keyenv * e) { /* any -> any any */
@@ -2331,6 +2318,7 @@ cb_member(keyenv * e, keyval * rv, int argc, const keyval * argv)
   if (argv[1].type == KEY_STR) {
     if (!strcmp(argv[1].sval, "memberfunc") ||
         !strcmp(argv[1].sval, "sort")) {
+      if (keyenv_get(e, argv[1].sval, rv) == KEY_OK) return KEY_OK;
       return key_global_get(argv[1].sval, rv);
     }
   }
@@ -2344,7 +2332,7 @@ cb_member(keyenv * e, keyval * rv, int argc, const keyval * argv)
     arr[idx] = argv[2].ival;
   }
   *rv = keyval_int(arr[idx]);
-  e = e; return KEY_OK;
+  return KEY_OK;
 }
 
 static keyret
