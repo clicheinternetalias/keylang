@@ -36,21 +36,20 @@
 typedef enum token_e {
   TOK_EOF = 0,
   /* lexical only */
-  TOK_ADD_A, TOK_AND_A, TOK_COAL_A, TOK_DEC, TOK_DIV_A, TOK_INC, TOK_LOGAND_A,
-  TOK_LOGOR_A, TOK_LSH_A, TOK_MOD_A, TOK_MUL_A, TOK_OR_A, TOK_RSH_A, TOK_SUB_A,
-  TOK_USH_A, TOK_XOR_A,
+  TOK_ADD_A, TOK_AND_A, TOK_COAL_A, TOK_CBRACE, TOK_CBRACK, TOK_COLON,
+  TOK_CPAREN, TOK_DEC, TOK_DIV_A, TOK_DOT, TOK_ELSE, TOK_INC, TOK_LOGAND_A,
+  TOK_LOGOR_A, TOK_LSH_A, TOK_MOD_A, TOK_MUL_A, TOK_OBRACE, TOK_OPAREN,
+  TOK_OR_A, TOK_RSH_A, TOK_SEMI, TOK_SUB_A, TOK_USH_A, TOK_XOR_A,
   /* lexical and ast */
-  TOK_ADD, TOK_AND, TOK_ASSIGN, TOK_BREAK, TOK_COAL, TOK_CBRACE, TOK_CBRACK,
-  TOK_COLON, TOK_COMMA, TOK_CONT, TOK_CPAREN, TOK_DIV, TOK_DO, TOK_DOT,
-  TOK_ELSE, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GT, TOK_IDENT, TOK_IF,
-  TOK_IS, TOK_ISNOT, TOK_INT, TOK_LOGAND, TOK_LOGNOT, TOK_LOGOR, TOK_LE,
-  TOK_LSH, TOK_LT, TOK_MOD, TOK_MUL, TOK_OBRACE, TOK_OBRACK, TOK_OPAREN,
-  TOK_OR, TOK_NE, TOK_NOT, TOK_QUEST, TOK_RETURN, TOK_RSH, TOK_SEMI, TOK_SUB,
-  TOK_STRING, TOK_TYPEOF, TOK_UNDEF, TOK_USH, TOK_VAR, TOK_VARARGS, TOK_WHILE,
-  TOK_XOR,
+  TOK_ADD, TOK_AND, TOK_ASSIGN, TOK_BREAK, TOK_COAL, TOK_COMMA, TOK_CONT,
+  TOK_DIV, TOK_DO, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GT, TOK_IDENT,
+  TOK_IF, TOK_IS, TOK_ISNOT, TOK_INT, TOK_LOGAND, TOK_LOGNOT, TOK_LOGOR,
+  TOK_LE, TOK_LSH, TOK_LT, TOK_MOD, TOK_MUL, TOK_OBRACK, TOK_OR, TOK_NE,
+  TOK_NOT, TOK_QUEST, TOK_RETURN, TOK_RSH, TOK_SUB, TOK_STRING, TOK_TYPEOF,
+  TOK_UNDEF, TOK_USH, TOK_VAR, TOK_VARARGS, TOK_WHILE, TOK_XOR,
   /* ast only */
-  TOK_LIST, TOK_CALL, TOK_NEG, TOK_ISDEF, TOK_FUNCX, TOK_M_ASSIGN,
-  TOK_S_ASSIGN, TOK_M_CALL, TOK_S_CALL, TOK_POSTCOMMA, TOK_OBJECT, TOK_ARRAY
+  TOK_LIST, TOK_NEG, TOK_FUNCX, TOK_M_ASSIGN, TOK_M_CALL, TOK_POSTCOMMA,
+  TOK_OBJECT, TOK_ARRAY
 } token_t;
 
 static char *
@@ -58,19 +57,18 @@ tok_name(token_t tk)
 {
   static char * names[] = {
     "eof",
-    "+=", "&=", "?\?=", "--", "/=", "++", "&&=",
-    "||=", "<<=", "%=", "*=", "|=", ">>=", "-=",
-    ">>>=", "^=",
-    "+", "&", "=", "break", "?\?", "}", "]",
-    ":", ",", "continue", ")", "/", "do", ".",
-    "else", "==", "for", "fn", ">=", ">", "identifier", "if",
-    "is", "isnot", "integer", "&&", "!", "||", "<=",
-    "<<", "<", "%", "*", "{", "[", "(",
-    "|", "!=", "~", "?", "return", ">>", ";", "-",
-    "string", "typeof", "undef", ">>>", "var", "...", "while",
-    "^",
-    "list", "call", "-", "?", "fn", ".=",
-    "[]=", ".()", "[]()", ",,", "object", "array"
+    "+=", "&=", "?\?=", "}", "]", ":",
+    ")", "--", "/=", ".", "else", "++", "&&=",
+    "||=", "<<=", "%=", "*=", "{", "(",
+    "|=", ">>=", ";", "-=", ">>>=", "^=",
+    "+", "&", "=", "break", "?\?", ",", "continue",
+    "/", "do", "==", "for", "fn", ">=", ">", "identifier",
+    "if", "is", "isnot", "integer", "&&", "!", "||",
+    "<=", "<<", "<", "%", "*", "[", "|", "!=",
+    "~", "?", "return", ">>", "-", "string", "typeof",
+    "undef", ">>>", "var", "...", "while", "^",
+    "list", "-", "fn", ".=", ".()", ",,",
+    "object", "array"
   };
   return names[tk];
 }
@@ -603,8 +601,7 @@ static keyret requireIdent(node * n) {
 }
 
 static keyret checkAssign(node * n) {
-  if (n->first->type == TOK_OBRACK) n->type = TOK_S_ASSIGN;
-  else if (n->first->type == TOK_DOT) n->type = TOK_M_ASSIGN;
+  if (n->first->type == TOK_OBRACK) n->type = TOK_M_ASSIGN;
   else return requireIdent(n->first);
   return KEY_OK;
 }
@@ -687,7 +684,8 @@ static keyret parseMember(node ** n) {
     { MATCH(TOK_DOT) {
       node * m = NULL;
       Q(parseIdent(&m));
-      *n = node_new2(TOK_DOT, *n, m);
+      m->type = TOK_STRING;
+      *n = node_new2(TOK_OBRACK, *n, m);
       continue;
     } }
     { MATCH(TOK_OBRACK) {
@@ -724,11 +722,10 @@ static keyret parsePostfix(node ** n) {
       node * m = NULL;
       Q(parseCallArgs(&m));
       Q(expect(TOK_CPAREN));
-      if ((*n)->type == TOK_OBRACK || (*n)->type == TOK_DOT) {
-        token_t type = (*n)->type == TOK_OBRACK ? TOK_S_CALL : TOK_M_CALL;
-        *n = node_new2(type, *n, m);
+      if ((*n)->type == TOK_OBRACK) {
+        *n = node_new2(TOK_M_CALL, *n, m);
       } else {
-        *n = node_new2(TOK_CALL, *n, m);
+        *n = node_new2(TOK_OPAREN, *n, m);
       }
       continue;
     } }
@@ -753,7 +750,6 @@ static keyret parsePrefix(node ** n) {
              isType(TOK_QUEST) || isType(TOK_SUB) || isType(TOK_ADD)) {
     token_t type = parser.type;
     if (type == TOK_SUB) type = TOK_NEG;
-    if (type == TOK_QUEST) type = TOK_ISDEF;
     Q(NEXT());
     Q(parsePrefix(n)); Q(require(*n, "expression"));
     if (type != TOK_ADD) *n = node_new1(type, *n);
@@ -1173,13 +1169,13 @@ static void compOne(const node * n) {
   switch (n->type) {
     case TOK_UNDEF:  { compPush(keyval_undef()); break; }
     case TOK_INT:    { compPush(keyval_int(n->ival)); break; }
-    case TOK_STRING: { compPush(keyval_str(n->sval)); break; }
+    case TOK_STRING: { compString(n); break; }
     case TOK_IDENT:  { compString(n); compCode(bcode_load); break; }
 
     case TOK_NOT:    { compOne(n->first); compCode(bcode_not); break; }
     case TOK_LOGNOT: { compOne(n->first); compCode(bcode_lognot); break; }
     case TOK_NEG:    { compOne(n->first); compCode(bcode_neg); break; }
-    case TOK_ISDEF:  { compOne(n->first); compCode(bcode_isdef); break; }
+    case TOK_QUEST:  { compOne(n->first); compCode(bcode_isdef); break; }
     case TOK_TYPEOF: { compOne(n->first); compCode(bcode_typeof); break; }
 
     case TOK_ADD: { compOne(n->first); compOne(n->second); compCode(bcode_add); break; }
@@ -1227,12 +1223,10 @@ static void compOne(const node * n) {
       compCode(bcode_assign);
       break;
     }
-    case TOK_M_ASSIGN:
-    case TOK_S_ASSIGN: { /* expr expr -> expr expr expr member */
+    case TOK_M_ASSIGN: { /* expr expr -> expr expr expr member */
       const node * m = n->first;
       compOne(m->first);
-      if (n->type == TOK_M_ASSIGN) compString(m->second);
-      else compOne(m->second);
+      compOne(m->second);
       compOne(n->second);
       compPush(keyval_int(3));
       compPush(keyval_str("__member__"));
@@ -1240,11 +1234,9 @@ static void compOne(const node * n) {
       compCode(bcode_call);
       break;
     }
-    case TOK_DOT:
     case TOK_OBRACK: { /* expr expr -> expr expr member */
       compOne(n->first);
-      if (n->type == TOK_DOT) compString(n->second);
-      else compOne(n->second);
+      compOne(n->second);
       compPush(keyval_int(2));
       compPush(keyval_str("__member__"));
       compCode(bcode_load);
@@ -1316,22 +1308,20 @@ static void compOne(const node * n) {
     case TOK_BREAK: { compCode(bcode_break); break; }
     case TOK_CONT:  { compCode(bcode_continue); break; }
 
-    case TOK_CALL: { /* expr call-list -> call-list N expr call */
+    case TOK_OPAREN: { /* expr call-list -> call-list N expr call */
       compOne(n->second);
       compPush(keyval_int(compCountList(n->second, TOK_LIST)));
       compOne(n->first);
       compCode(bcode_call);
       break;
     }
-    case TOK_M_CALL:
-    case TOK_S_CALL: { /* expr call-list -> object call-list N+1 index expr member call */
+    case TOK_M_CALL: { /* expr call-list -> object call-list N+1 index expr member call */
       const node * m = n->first;
       compOne(m->first);
       compOne(n->second);
       compPush(keyval_int(compCountList(n->second, TOK_LIST) + 1));
       compCode(bcode_index); /* don't twice-compile/eval an expr */
-      if (n->type == TOK_M_CALL) compString(m->second);
-      else compOne(m->second);
+      compOne(m->second);
       compPush(keyval_int(2));
       compPush(keyval_str("__member__"));
       compCode(bcode_load);  /* load __member__ to get the method-getter */
