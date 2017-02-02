@@ -42,37 +42,35 @@ typedef enum token_e {
   /* lexical and ast */
   TOK_ADD, TOK_AND, TOK_ASSIGN, TOK_BREAK, TOK_COAL, TOK_CBRACE, TOK_CBRACK,
   TOK_COLON, TOK_COMMA, TOK_CONT, TOK_CPAREN, TOK_DIV, TOK_DO, TOK_DOT,
-  TOK_ELSE, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GT,
-  TOK_IDENT, TOK_IF, TOK_IS, TOK_ISNOT, TOK_INT, TOK_LOGAND, TOK_LOGNOT,
-  TOK_LOGOR, TOK_LE, TOK_LSH, TOK_LT, TOK_MOD, TOK_MUL, TOK_OBRACE, TOK_OBRACK,
-  TOK_OPAREN, TOK_OR, TOK_NE, TOK_NOT, TOK_QUEST, TOK_RETURN, TOK_RSH,
-  TOK_SEMI, TOK_SUB, TOK_STRING, TOK_TYPEOF, TOK_UNDEF, TOK_USH, TOK_VAR,
-  TOK_VARARGS, TOK_WHILE, TOK_XOR,
+  TOK_ELSE, TOK_EQ, TOK_FOR, TOK_FUNC, TOK_GE, TOK_GT, TOK_IDENT, TOK_IF,
+  TOK_IS, TOK_ISNOT, TOK_INT, TOK_LOGAND, TOK_LOGNOT, TOK_LOGOR, TOK_LE,
+  TOK_LSH, TOK_LT, TOK_MOD, TOK_MUL, TOK_OBRACE, TOK_OBRACK, TOK_OPAREN,
+  TOK_OR, TOK_NE, TOK_NOT, TOK_QUEST, TOK_RETURN, TOK_RSH, TOK_SEMI, TOK_SUB,
+  TOK_STRING, TOK_TYPEOF, TOK_UNDEF, TOK_USH, TOK_VAR, TOK_VARARGS, TOK_WHILE,
+  TOK_XOR,
   /* ast only */
-  TOK_LIST, TOK_NATIVE, TOK_CALL, TOK_ARGLIST, TOK_NEG, TOK_ISDEF, TOK_XFUNC,
-  TOK_M_ASSIGN, TOK_S_ASSIGN, TOK_M_CALL, TOK_S_CALL, TOK_POSTCOMMA,
-  TOK_OBJECT, TOK_ARRAY
+  TOK_LIST, TOK_CALL, TOK_NEG, TOK_ISDEF, TOK_FUNCX, TOK_M_ASSIGN,
+  TOK_S_ASSIGN, TOK_M_CALL, TOK_S_CALL, TOK_POSTCOMMA, TOK_OBJECT, TOK_ARRAY
 } token_t;
 
 static char *
-tok_string(token_t tk)
+tok_name(token_t tk)
 {
   static char * names[] = {
-    "end of file",
+    "eof",
     "+=", "&=", "?\?=", "--", "/=", "++", "&&=",
     "||=", "<<=", "%=", "*=", "|=", ">>=", "-=",
     ">>>=", "^=",
     "+", "&", "=", "break", "?\?", "}", "]",
     ":", ",", "continue", ")", "/", "do", ".",
-    "else", "==", "for", "fn", ">=", ">",
-    "identifier", "if", "is", "isnot", "integer", "&&", "!",
-    "||", "<=", "<<", "<", "%", "*", "{", "[",
-    "(", "|", "!=", "~", "?", "return", ">>",
-    ";", "-", "string", "typeof", "undef", ">>>", "var",
-    "...", "while", "^",
-    "list", "native", "call", "alist", "-", "?", "fn",
-    ".=", "[]=", ".()", "[]()", ",,",
-    "object", "array"
+    "else", "==", "for", "fn", ">=", ">", "identifier", "if",
+    "is", "isnot", "integer", "&&", "!", "||", "<=",
+    "<<", "<", "%", "*", "{", "[", "(",
+    "|", "!=", "~", "?", "return", ">>", ";", "-",
+    "string", "typeof", "undef", ">>>", "var", "...", "while",
+    "^",
+    "list", "call", "-", "?", "fn", ".=",
+    "[]=", ".()", "[]()", ",,", "object", "array"
   };
   return names[tk];
 }
@@ -494,7 +492,7 @@ lexer_next(token_t * type, char * buf, size_t buflen)
     }
     default: { return tokerror("unexpected character '%c'", c); }
   }
-  strcpy(lexer.buf, tok_string(*type));
+  strcpy(lexer.buf, tok_name(*type));
 #undef EQ
 #undef MAYBE
 #undef ONEOREQ
@@ -593,7 +591,7 @@ static keyret consume(token_t tk, int * found) {
 }
 static keyret expect(token_t tk) {
   if (parser.type == tk) return NEXT();
-  return tokerror("unexpected '%s', expected '%s'", parser.buf, tok_string(tk));
+  return tokerror("unexpected '%s', expected '%s'", parser.buf, tok_name(tk));
 }
 static keyret require(node * n, const char * name) {
   if (!n) return tokerror("missing %s", name);
@@ -953,7 +951,8 @@ static keyret parseFunctionArglistOne(node ** n, int * va) {
   Q(parseIdent(&m));
   if (!m && !*n) return KEY_OK; /* empty list */
   Q(requireIdent(m));
-  *n = node_new2(TOK_ARGLIST, *n, m);
+  m->type = TOK_STRING;
+  *n = node_new2(TOK_LIST, *n, m);
   { MATCH(TOK_VARARGS) {
     *n = node_new1(TOK_VARARGS, *n);
     *va = 1; /* '...' must be last in list */
@@ -994,7 +993,7 @@ static keyret parseFunction(node ** n, int isexpr) {
   parser.funcDepth++;
   Q(parseStatement(&body)); Q(require(body, "statement"));
   parser.funcDepth--;
-  token_t type = isexpr ? TOK_XFUNC : TOK_FUNC;
+  token_t type = isexpr ? TOK_FUNCX : TOK_FUNC;
   *n = node_new3(type, name, args, body);
   return KEY_OK;
 }
@@ -1352,14 +1351,7 @@ static void compOne(const node * n) {
       compCode(bcode_var);
       break;
     }
-    case TOK_ARGLIST: { /* ident ident -> str str */
-      if (n->first && n->first->type == TOK_IDENT) compString(n->first);
-      else compOne(n->first);
-      if (n->second && n->second->type == TOK_IDENT) compString(n->second);
-      else compOne(n->second);
-      break;
-    }
-    case TOK_XFUNC:
+    case TOK_FUNCX:
     case TOK_FUNC: { /* name args body -> proc dup? name var */
       /* proc: name pop arg-names... arg-name-count defargs body */
       int va = n->second && n->second->type == TOK_VARARGS;
@@ -1368,11 +1360,11 @@ static void compOne(const node * n) {
       compString(n->first);
       compCode(bcode_pop);
       compOne(args);
-      compPush(keyval_int(compCountList(args, TOK_ARGLIST)));
+      compPush(keyval_int(compCountList(args, TOK_LIST)));
       compCode(va ? bcode_varargs : bcode_defargs);
       compOne(n->third);
       procEnd();
-      if (n->type == TOK_XFUNC) compCode(bcode_dup);
+      if (n->type == TOK_FUNCX) compCode(bcode_dup);
       compString(n->first);
       compCode(bcode_var);
       break;
